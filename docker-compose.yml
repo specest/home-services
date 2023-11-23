@@ -1,0 +1,80 @@
+version: '3'
+services:
+  plex:
+    image: ghcr.io/linuxserver/plex:arm64v8-latest
+    restart: unless-stopped
+    container_name: plex
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - 32400:32400/tcp
+      - 3005:3005/tcp
+      - 8324:8324/tcp
+      - 32469:32469/tcp
+      - 1900:1900/udp
+      - 32410:32410/udp
+      - 32412:32412/udp
+      - 32413:32413/udp
+      - 32414:32414/udp
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - PLEX_CLAIM=${PLEX_CLAIM}
+      - HOSTNAME=”PlexServer”
+    volumes:
+      - ./plex/config:/config
+      - ./plex/transcodes:/transcode
+      - ${MEDIA}:/media
+    # Check the readme on how to install on systems with systemd-resolve
+    # https://github.com/pi-hole/docker-pi-hole#installing-on-ubuntu-or-fedora
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    environment:
+      WEBPASSWORD: ${WEBPASSWORD}
+      TZ: ${TZ}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8888:80/tcp"
+    volumes:
+      - './pi-hole/etc-pihole:/etc/pihole'
+      - './pi-hole/etc-dnsmasq.d:/etc/dnsmasq.d'
+    #   https://github.com/pi-hole/docker-pi-hole#note-on-capabilities
+    # cap_add:
+    #   - NET_ADMIN # Required if you are using Pi-hole as your DHCP server, else not needed
+    restart: unless-stopped
+
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - ./home-assistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    privileged: true
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    network_mode: host
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
+
+  samba:
+    image: docker.io/servercontainers/samba:latest
+    container_name: samba
+    restart: unless-stopped
+    environment:
+      ACCOUNT_username: password
+      UID_username: 1001
+      SAMBA_VOLUME_CONFIG_nas: "[nas]; path=/shares/nas; available = yes; guest ok = yes; browsable = yes; writable = yes; read only = no"
+    volumes:
+      - ${NAS_LOCATION}:/shares/nas
+    ports:
+      - 445:445

@@ -49,32 +49,46 @@ services:
     # cap_add:
     #   - NET_ADMIN # Required if you are using Pi-hole as your DHCP server, else not needed
     restart: unless-stopped
-
   homeassistant:
     container_name: homeassistant
     image: "ghcr.io/home-assistant/home-assistant:stable"
-    volumes:
-      - ./home-assistant/config:/config
-      - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
-    privileged: true
+    environment:
+      TZ: ${TZ}
     dns:
       - 8.8.8.8
       - 8.8.4.4
-    network_mode: host
+    volumes:
+      - ./home-assistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - 8123:8123/tcp
+      - 1900:1900/tcp
+      - 5353:5353/tcp
+    restart: unless-stopped
+    privileged: true
+    networks:
+      - hass_network
     devices:
       - /dev/ttyUSB0:/dev/ttyUSB0
       - /dev/ttyUSB1:/dev/ttyUSB1
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8123 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   samba:
     image: docker.io/servercontainers/samba:latest
     container_name: samba
     restart: unless-stopped
     environment:
-      ACCOUNT_username: password
-      UID_username: 1001
-      SAMBA_VOLUME_CONFIG_nas: "[nas]; path=/shares/nas; available = yes; guest ok = yes; browsable = yes; writable = yes; read only = no"
+      SAMBA_VOLUME_CONFIG_nas: "[nas]; path=/shares/nas; available = yes; guest ok = yes; guest only = yes; guest account = nobody; map to guest = Bad User; browsable = yes; writable = yes; read only = no"
     volumes:
       - ${NAS_LOCATION}:/shares/nas
     ports:
       - 445:445
+
+networks:
+  hass_network:
+    driver: bridge
